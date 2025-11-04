@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Tooth Image Analyzer</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f3f4f6; text-align: center; margin-top: 60px; }
+    form { background: #fff; padding: 25px; border-radius: 12px; display: inline-block; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    button { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; }
+    button:hover { background: #0056b3; }
+    #result { margin-top: 25px; white-space: pre-wrap; text-align: left; display: inline-block; background: #f8f9fa; padding: 15px; border-radius: 10px; width: 60%; }
+    img { margin-top: 15px; max-width: 300px; border-radius: 10px; }
+    .config { margin: 20px; padding: 15px; background: #fff3cd; border-radius: 8px; display: inline-block; }
+    .config input { padding: 8px; margin: 5px; width: 300px; border: 1px solid #ddd; border-radius: 4px; }
+    .config label { display: block; margin-bottom: 5px; font-weight: bold; }
+    .config.hidden { display: none; }
+  </style>
+</head>
+<body>
+  <h1>🦷 Tooth Image Analyzer</h1>
+
+  <div class="config hidden" id="configPanel">
+    <label for="apiUrl">Backend API URL (for GitHub Pages):</label>
+    <input type="text" id="apiUrl" placeholder="https://your-backend.onrender.com/upload" />
+    <button onclick="saveApiUrl()">Save URL</button>
+    <p style="font-size: 12px; margin-top: 10px;">
+      <strong>Note:</strong> Only needed when hosting on GitHub Pages. 
+      <br/>Example: https://dental-ai-backend.onrender.com/upload
+    </p>
+  </div>
+
+  <form id="uploadForm" enctype="multipart/form-data">
+    <input type="file" name="file" accept="image/*" required /><br /><br />
+    <button type="submit">Analyze Image</button>
+  </form>
+
+  <div id="preview"></div>
+  <div id="result"></div>
+
+  <script>
+    // Detect if we're on GitHub Pages or local Flask server
+    const isGitHubPages = window.location.hostname.includes('github.io') || 
+                         window.location.hostname.includes('github.com') ||
+                         window.location.protocol === 'file:';
+    
+    // Show config panel only on GitHub Pages
+    if (isGitHubPages) {
+      document.getElementById('configPanel').classList.remove('hidden');
+    }
+
+    // Get API URL - use relative for Flask, saved URL for GitHub Pages
+    function getApiUrl() {
+      if (!isGitHubPages) {
+        // Local Flask server - use relative URL
+        return '/upload';
+      }
+      // GitHub Pages - use saved URL or prompt
+      const saved = localStorage.getItem('dentalAiApiUrl');
+      if (saved) {
+        return saved;
+      }
+      return null; // Will prompt user
+    }
+
+    function saveApiUrl() {
+      const url = document.getElementById('apiUrl').value.trim();
+      if (url) {
+        localStorage.setItem('dentalAiApiUrl', url);
+        alert('API URL saved!');
+      }
+    }
+
+    // Load saved URL on page load (for GitHub Pages)
+    if (isGitHubPages) {
+      window.onload = function() {
+        const savedUrl = localStorage.getItem('dentalAiApiUrl');
+        if (savedUrl) {
+          document.getElementById('apiUrl').value = savedUrl;
+        }
+      };
+    }
+
+    const form = document.getElementById('uploadForm');
+    const resultDiv = document.getElementById('result');
+    const previewDiv = document.getElementById('preview');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const apiUrl = getApiUrl();
+      if (!apiUrl) {
+        resultDiv.textContent = "⚠️ Please configure your backend API URL first!";
+        document.getElementById('configPanel').classList.remove('hidden');
+        return;
+      }
+
+      resultDiv.textContent = "Analyzing, please wait...";
+      previewDiv.innerHTML = "";
+
+      const formData = new FormData(form);
+      const file = formData.get('file');
+
+      if (file) {
+        const img = document.createElement('img');
+        img.src = URL.createObjectURL(file);
+        previewDiv.appendChild(img);
+      }
+
+      try {
+        const response = await fetch(apiUrl, { method: 'POST', body: formData });
+        const text = await response.text();
+        
+        if (!response.ok) {
+          resultDiv.textContent = `Error (${response.status}): ${text}`;
+        } else {
+          resultDiv.textContent = text;
+        }
+      } catch (err) {
+        if (isGitHubPages) {
+          resultDiv.textContent = `Error connecting to server: ${err.message}\n\nMake sure:\n1. Your Flask backend is running\n2. The API URL is configured correctly\n3. CORS is enabled on your backend`;
+        } else {
+          resultDiv.textContent = `Error connecting to server: ${err.message}\n\nMake sure:\n1. Flask server is running (python app.py)\n2. You accessed this page via http://localhost:12355/ (not file://)\n3. Check browser console for more details`;
+        }
+        console.error('Fetch error:', err);
+      }
+    });
+  </script>
+</body>
+</html>
